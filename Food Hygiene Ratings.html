@@ -1,0 +1,355 @@
+<html>
+<head>
+<title>Food Hygiene Ratings</title>
+<!-- load jQuery and jQuery UI libraries -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+<script>
+$(document).ready(function() {
+	// run functions when the DOM is ready to load default results into table and create paginator
+	populateTable();
+	createPaginator();
+});
+
+// declare results used to populate the table
+var results;
+
+// gets data from script for first 10 results, stores in results in json format
+$.ajax({
+	'async': false,
+	'url': 'https://www.cs.kent.ac.uk/people/staff/lb514/hygiene/hygiene.php',
+	'dataType': 'json',
+	'success': function(data) {
+		results = data;
+	}
+});
+
+// declare variables used to create paginator
+var pagecount;
+var pages;
+
+// requests amount of pages of results available from the script
+$.ajax({
+	'async': false,
+	'url': 'https://www.cs.kent.ac.uk/people/staff/lb514/hygiene/hygiene.php?op=pages',
+	'dataType': 'json',
+	'success': function(data) {
+		// declare data as pagecount then store individual in pages variable
+		pagecount = eval(data);
+		pages = pagecount.pages;
+	}
+});
+
+function populateTable() {
+	// clears table of all rows except row at index 0 (the headers)
+	$('#results').find("tr:gt(0)").remove();
+	// loops through results and appends them to a <tr> with <td> tags looping through each to populate the table with the data from results
+	$.each(results, function(r, result) {
+		$('<tr>').append(
+			$('<td class="business">').text(result.business),
+			$('<td class="address">').text(result.address),
+			$('<td class="hygiene">').text(result.rating),
+			$('<td class="date">').text(result.date),
+			// adds button which contains the business name in the id value. this is passed to the viewRating function when clicked 
+			$('<td class="rating"><input type="button" name="' + result.postcode + '" onclick="viewRating(this.id, this.name)" class="rating" id="' + result.business + '" value="Get Rating" />')
+		).appendTo('#results');
+	});
+};
+
+function createPaginator() {
+	// loops through and creates the amount of pages given by the ajax request earlier
+	for(var i = 1; i <= pages; i++) {
+		// appends each button to a div, and uses the i variable to name them
+		$('#buttons').append('<input type="button" onclick="viewPage(this.id)" class="paginator" id="' + i + '"value="' + i + '"/> ');
+	}
+};
+
+function viewPage(page) {
+	// when a page button is clicked this function is called with the button id passed as parameter
+	$.ajax({
+		'async': false,
+		'url': 'https://www.cs.kent.ac.uk/people/staff/lb514/hygiene/hygiene.php?op=retrieve&page=' + page,
+		'dataType': 'json',
+		'success': function(data) {
+			results = data;
+		}
+	});
+	// calls populateTable() function to populate table with results from ajax request
+	populateTable();
+}
+
+function viewSearch() {
+	// checks if the search box is empty
+	if (!$('[name="searchquery"]').val())
+	{
+		// update paragraph to display error, return to halt execution of the script
+		$('#noresults').text('No search term entered.');
+		// sets noresults paragraph to a blank string after a delay
+		setTimeout(function() {
+			$('#noresults').text('');
+		}, 1500);
+	}
+	// select object using name attribute and declare variable with it's value
+	var searchquery = $('[name="searchquery"]').val();
+	$.ajax({
+		'async': false,
+		'url': 'https://www.cs.kent.ac.uk/people/staff/lb514/hygiene/hygiene.php?op=searchname&name=' + searchquery,
+		'dataType': 'json',
+		'success': function(data) {
+			if (!$.trim(data)) {
+				$('#noresults').text('No results found for ' + searchquery + '.');
+				// sets noresults paragraph to a blank string after a delay
+				setTimeout(function() {
+					$('#noresults').text('');
+				}, 1500);
+			}
+			else
+			{
+				// populates table with results
+				results = data;
+				populateTable();
+			}
+		}
+	});
+}
+
+function viewRating(name, postcode) {
+	// creates popup dialog using jQueryUI, includes ok button to exit, 
+	// set to modal so user must close it before clicking another rating
+	$("#popup").dialog({
+		dialogClass: "no-close",
+        modal: true,
+		open: function(event, ui) { $(".ui-dialog-titlebar-close").hide(); },
+        title: name,
+        width: 300,
+        height: 250,
+		buttons: {
+			Ok: function() {
+				$(this).dialog("close");
+			}
+		}
+    });
+	// dialog box opens when this function is called (on click of a get rating button)
+	$.ajax({
+		'async': false,
+		'url': 'https://www.cs.kent.ac.uk/people/staff/lb514/hygiene/rating.php?name=' + name,
+		'dataType': 'json',
+		'success': function(data) {
+			// checks if there is no result and displays appropriate message in the popup
+			if (!$.trim(data)) {
+				$('#popuptext').text("Sorry, there are no Google ratings for this venue.");
+			}
+			// checks to see if there's only one result before updating the popup with the rating
+			if (!data[1]) {
+				var rating = data[0].rating;
+				$('#popuptext').text("Average rating on Google: " + rating + "/5.");
+				return;
+			}
+			else
+			{
+				// loops through and matches the restaurant's post code to the address in the results
+				// in order to return the correct rating value
+				for (var i = 0; i < data.length; i++)
+				{
+					if (data[i].address.indexOf(postcode) != -1)
+					{	
+						var rating = data[i].rating;
+						$('#popuptext').text("Average rating on Google: " + rating + "/5.");
+					}
+				}
+			}
+		}
+	});
+	// display the dialog box with the updated rating
+	$('#popup').dialog('open');
+}
+</script>
+<style>
+/* sets styling for background color and text */
+body {
+	background-color: #00cc66;
+	color: white;
+}
+/* sets styling for table border and width, defines max height and adds a scroll bar */
+table {
+	border-collapse: collapse;
+}
+/* sets styling for tbody, adds scroll bar and a maximum height */
+tbody {
+	position: absolute;
+	max-height: 675px;
+	width: 900px;
+	overflow-y: scroll;
+	border: 1px solid;
+}
+/* sets styling for table headers */
+th {
+	background-color: white;
+	color: grey;
+	font-family: Arial, sans-serif;
+	padding: 6px;
+}
+/* sets width for td elements so each one can be custom sized */
+td.address {
+	width: 50%;
+}
+td.hygiene {
+	width: 5%;
+}
+td.business {
+	width: 20%;
+}
+td.date {
+	width: 15%;
+}
+td.rating {
+	width: 10%;
+}
+/* sets styling for table data and table */
+td, table {
+	text-align: center;
+	color: white;
+	font-family: Arial, sans-serif;
+	padding: 10px;
+	font-size: 12;
+	word-wrap: break-word;
+}
+/* sets text shadow on table data text */
+td {
+	text-shadow: 1px 1px 2px #000;
+}
+/* sets styling for opening paragraph */
+p.text {
+	font-family: Arial, sans-serif;
+	color: white;
+	text-align: center;
+}
+/* sets styling for the search error messages */
+p.noresults {
+	font-family: Arial, sans-serif;
+	color: white;
+	text-align: center;
+	font-weight: bold;
+}
+/* positions table and opening paragraph in the center of the page */
+div.center {
+	width: 900px;
+	position: absolute;
+	top: 5%;
+	left: 50%;
+	transform: translate(-50%, -5%);
+}
+/* positions div that the paginator is added to */
+div.buttons {
+	position: absolute;
+	top: 92%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+}
+/* sets styling of paginator buttons */
+input.paginator {
+	height: 30px;
+	width: 30px;
+	background-color: white;
+	color: grey;
+	border-radius: 4px;
+	border: none;
+	display: inline-block;
+}
+/* sets styling of search box and submit button */
+input.search {
+	color: grey;
+	padding: 10px 20px;
+	background-color: white;
+	border: none;
+	display: inline-block;
+}
+/* sets styling of get rating button */
+input.rating {
+	color: grey;
+	padding: 5px 10px;
+	background-color: white;
+	border: none;
+	margin: auto;
+	display: block;
+}
+/* sets position of the search objects */
+div.search {
+	position: absolute;
+	top: 96%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+}
+/* sets styling and position of the popup text */
+p.popuptext {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	color: black;
+	font-family: Arial, sans-serif;
+}
+/* sets styling for popup text */
+.ui-widget-header {
+    background: #00cc66;
+    border: 0;
+    color: white;
+	text-shadow: 1px 1px 2px #000;
+}
+/* sets styling for popup background */
+.ui-widget-content {
+	background-color: white;
+	font-size: 20px;
+}
+/* sets styling for popup titlebar */
+.ui-dialog-titlebar {
+	background-color: grey;
+	font-size: 24px;
+	text-align: center;
+	font-family: Arial, sans-serif;
+}
+/* sets styling of popup button */
+.ui-dialog .ui-dialog-buttonpane button {
+	border: none;
+	color: white;
+	background-color: grey;
+	width: 100%;
+	height: 25px;
+}
+</style>
+</head>
+<body>
+<!-- div which contains the popup -->
+<div id="popup" align="center">
+	<!-- paragraph that contains the rating -->
+	<p id="popuptext" class="popuptext"></p>
+</div>
+<!-- div which contains the opening paragraph and table -->
+<div class="center">
+	<!-- opening paragraph -->
+	<p class="text">Welcome to Food Hygiene Ratings!<br> Here you can view local restaurants and cafes in Canterbury,<br> and browse their hygiene rating and user ratings from other people who've visited.</p><br>
+	<!-- create table to be populated by the script -->
+	<table width="900">
+		<tbody id="results">
+			<tr>
+				<th>Restaurant</th>
+				<th>Address</th>
+				<th>Hygiene</th>
+				<th>Date</th>
+				<th>User Rating</th>
+			</tr>
+		</tbody>
+	</table>
+</div>
+<!-- div which contains the paginator buttons once created -->
+<div id="buttons" class="buttons"></div>
+<!-- div which contains the search objects --> 
+<div class="search">
+	<!-- paragraph used to display error message relating to search -->
+	<p class="noresults" id="noresults"></p>
+	<!-- search input box and submit button which calls the viewSearch() function -->
+	<input type="text" name="searchquery" class="search" id="search" value="Input restaurant name..." /> 
+	<input type="button" class="search" id="submit" onclick="viewSearch()" value="Submit" />
+</div>
+</body>
+</html>
